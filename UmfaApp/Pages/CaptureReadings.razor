@@ -1,0 +1,974 @@
+﻿@page "/capture-readings/{RequestId:guid}"
+
+@using Plugin.Maui.Audio;
+@using UmfaApp.Data.Tables;
+@using UmfaApp.Services;
+@using UmfaApp.Settings;
+
+@inject PreloadService PreloadService
+@inject IReadingListService ReadingListService
+@inject IAudioManager AudioManager
+@inject ToastService ToastService
+
+<style>
+    th {
+        padding: 0 !important;
+    }
+
+    thead tr:first-child th{
+        padding: 5px !important;
+    }
+
+    thead input{
+        width: 100% !important;
+        border-radius: 0 !important;
+        border-top: none !important;
+        border-bottom: none !important;
+        border-right: none !important;
+        box-shadow : none !important;
+        outline: none !important;
+        border-left: 1px solid #dee2e6 !important;
+    }
+
+    .bb-grid-filter {
+        border-radius: 0;
+        margin-right: 0 !important;
+        font-size: small;
+    }
+
+    td {
+        font-size: small !important;
+        padding: 0 !important
+    }
+
+    td p{
+        font-size: small !important;
+        padding-top: 0.6rem;
+        padding-bottom: 0.5rem;
+        margin-bottom: 0 !important;
+        padding-left: 0.3rem;
+    }
+
+    .row-success {
+        background-color: #ebffe8;
+    }
+
+    .table-responsive {
+        margin-top: 0;
+    }
+
+    .modal-body {
+
+    }
+
+    .capture-modal {
+        font-size: small;
+    }
+
+    .confirm-btn {
+        background-color: #FFFFFF;
+        padding: 5px 20px 5px 20px;
+        color: black;
+        border-radius: 8px;
+    }
+
+    .cancel-btn {
+        padding: 5px 20px 5px 20px;
+        background-color: #006EFD;
+        color: white;
+        border-radius: 8px;
+    }
+
+    .bd-radius-7 {
+        border-radius: 7px;
+    }
+
+    .bg-transparent {
+        background-color: transparent;
+    }
+
+    .w-80 {
+        width: 80%;
+    }
+    .bg-ligth-blue {
+        background-color: #E8F1FF;
+    }
+    .light-blue {
+        color: #3374D5
+    }
+
+    .bg-dark {
+        background-color:#212847
+    }
+
+    .bg-light {
+        background-color: #FFFFFF
+    }
+
+    .bg-dark-active {
+        background-color: #3C425E
+    }
+
+    .bg-light-active {
+        background-color: #ECEFF4;
+    }
+
+    .font-light {
+        color: #384EA0;
+    }
+
+    .font-dark {
+        color: #FFFFFF;
+    }
+</style>
+<div class="row bg-ligth-blue">
+    <div class="col-6 d-flex align-items-center justify-content-center p-2">
+        <input type="checkbox" id="isCaptured" value="@_isCaputred" checked="@_isCaputred" @onchange="() => FilterIsCaptured()" />
+        <label for="isCaptured" class="m-2 light-blue">Captured</label>
+    </div>  
+    <div class="col-6 d-flex align-items-center justify-content-center p-2">
+        <input type="checkbox" id="isUnCaptured" value="@_isUnCaputred" checked="@_isUnCaputred" @onchange="() => FilterIsUnCaptured()" />
+        <label for="isUnCaptured" class="m-2 light-blue">Uncaptured</label>
+    </div>
+</div>
+<h3 class="page-title">Capture Readings</h3>
+
+@if(!string.IsNullOrWhiteSpace(_problemText))
+{
+    <p>@_problemText</p>
+}
+
+
+@if(_filteredReadings is not null && _filteredReadings.Any())
+{
+    <Grid @key="@_keyValue"
+        TItem="Reading" 
+        AllowRowClick="true"
+        class="table table-hover table-bordered" 
+        DataProvider="ReadingsDataProvider" 
+        AllowFiltering="true" 
+        AllowSorting="true"
+        Responsive="true" 
+        AllowPaging="false"
+        THeadCssClass ="capture-readings-th"
+        ItemsPerPageText="10" 
+        PageSizeSelectorItems="@(new int[] { 5,10,20 })" 
+        PaginationItemsTextFormat=""
+        RowClass="GetRowClass"
+        OnRowClick="OnRowClick">
+        <GridColumn TItem="Reading" HeaderText="" PropertyName="Sequence" SortString="Sequence" SortKeySelector="item => item.SequenceNo" Filterable="false">
+            <p>@context.SequenceNo</p>
+        </GridColumn>
+        <GridColumn TItem="Reading" HeaderText="Meter" PropertyName="MeterNo" SortString="MeterNo" SortKeySelector="item => item.MeterNo" FilterTextboxWidth="40">
+            <p>@context.MeterNo</p>
+        </GridColumn>
+        <GridColumn TItem="Reading" HeaderText="Location" PropertyName="Location" SortString="Location" SortKeySelector="item => item.Location" FilterTextboxWidth="60">
+            <div style="position: relative;">
+                <p>@context.Location</p>
+                
+                <span style="position: absolute; top: 0; right: 0; font-size: smaller; vertical-align: sub;">
+                    @if(@context.HasAbnormality)
+                    {
+                        <Icon Class="pe-1" Name="IconName.ExclamationCircleFill" Color="IconColor.Danger"/>
+                    }
+                    
+                    @if(!string.IsNullOrWhiteSpace(@context.Photos))
+                    {
+                        <Icon Class="pe-1" Name="IconName.ImageFill" Color="IconColor.Primary"/>
+                    }
+
+                    @if(!string.IsNullOrWhiteSpace(@context.VoiceNote))
+                    {
+                        <Icon Class="pe-1" Name="IconName.MicFill" Color="IconColor.Primary"/>
+                    }
+
+                </span>
+            </div>
+        </GridColumn>
+    </Grid>
+}
+
+
+    <Modal @ref="_modal" Title="@_currentReading?.MeterNo" ModalType="ModalType.Dark" BodyCssClass="bg-dark capture-modal" FooterCssClass="bg-dark">
+    <BodyTemplate>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Sequence:</div>
+            <div class="col-7 text-secondary">@_currentReading?.SequenceNo</div>
+        </div>
+         <div class="row mb-2">
+            <div class="col-5 text-light">Building:</div>
+            <div class="col-7 text-secondary">@_currentReading?.BuildingName</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Tenant:</div>
+            <div class="col-7 text-secondary">@_currentReading?.Tenant</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Location:</div>
+            <div class="col-7 text-secondary">@_currentReading?.Location</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">CB:</div>
+            <div class="col-7 text-secondary">@_currentReading?.CBSize</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Multiplication Factor:</div>
+            <div class="col-7 text-secondary">@_currentReading?.MultFactor</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Previous reading date:</div>
+            <div class="col-7 text-secondary">@_currentReading?.PreviousReadingdate</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Previous reading:</div>
+            <div class="col-7 text-secondary">@_currentReading?.PreviousReading</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Expected reading:</div>
+            <div class="col-7 text-secondary">@_currentReading?.ExpectedReading</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Average usage:</div>
+            <div class="col-7 text-secondary">@_currentReading?.AverageUsage</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Reading date:</div>
+            <div class="col-7 text-secondary">@(_currentReading?.ReadingDate is null ? "N/A" : _currentReading?.ReadingDate)</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Current reading:</div>
+            <div class="col-7 text-secondary">@_currentReading?.ActualReading</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Is this a rollover:</div>
+            <div class="col-7 text-secondary">@_currentReading?.RollOver</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light">Usage:</div>
+            <div class="col-7 text-secondary">@_currentReading?.Usage</div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light d-flex align-items-center justify-content-between no-right-space">
+                <span>Note:</span>
+                @if(!string.IsNullOrWhiteSpace(@_currentReading?.NewNote))
+                {
+                    <a @onclick="OpenNote"><Icon Name="IconName.ChatFill" Color="IconColor.White"/></a>
+                }
+            </div>
+            <div class="col-7 text-secondary">
+                @_currentReading?.NewNote
+            </div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-5 text-light d-flex align-items-center justify-content-between no-right-space">
+                <span>Photos:</span>
+                @if(_currentReading?.PhotosList?.Count() is not null)
+                {
+                    <a @onclick="ShowImageModel"><Icon Name="IconName.CardImage" Color="IconColor.White"/></a>
+                }
+            </div>
+            <div class="col-7 text-secondary">
+                @(_currentReading?.PhotosList?.Count() ?? 0)
+            </div>
+        </div>
+         <div class="row mb-2">
+            <div class="col-5 text-light d-flex align-items-center justify-content-between no-right-space">
+                <span>Voice Note:</span>
+                @if(!string.IsNullOrWhiteSpace(_currentReading?.VoiceNote)) {
+                    <a @onclick="PlayAudio">
+                        <Icon Name="IconName.PlayCircleFill" Color="IconColor.White"></Icon>
+                    </a>
+                }
+            </div>
+            <div class="col-7 text-secondary ">
+                @if(string.IsNullOrWhiteSpace(_currentReading?.VoiceNote))
+                {
+                    <span>None</span>
+                }
+                @* else
+                {
+                    <Button Color="ButtonColor.Dark" @onclick="PlayAudio">
+                        <Icon Name="IconName.PlayCircleFill" Color="IconColor.White"></Icon>
+                    </Button>
+                } *@
+            </div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-9">
+                <InputNumber TValue="double?" @bind-Value="@_actualReading" class="form-control" placeholder="Current reading"/>
+            </div>
+            <div class="col-3 text-light">
+                <Button Color="ButtonColor.Primary" @onclick="async () => await SaveReading()">Save</Button>
+            </div>
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="form-control d-flex justify-content-between">
+            <Button Color="ButtonColor.Dark" @onclick="SetPreviousReading">Previous</Button>
+            <Button Color="ButtonColor.Dark" @onclick="OpenNote"><Icon Name="IconName.Chat"></Icon></Button>
+            <Button Color="ButtonColor.Dark" @onclick="TakePhoto"><Icon Name="IconName.Camera"></Icon></Button>
+            <Button Color="@(_audioRecorder?.IsRecording == true ? ButtonColor.Success : ButtonColor.Dark)" @onclick="RecordAudio"><Icon Name="IconName.Mic"></Icon></Button>
+            <Button Color="ButtonColor.Dark" @onclick="SetNextReading">Next</Button>
+        </div>
+    </FooterTemplate>
+</Modal>
+
+<Modal OnHidden="ShowModel" @ref="_imageModal" Title="@_currentReading?.MeterNo" ModalType="ModalType.Dark" BodyCssClass="bg-dark" FooterCssClass="bg-dark">
+    <BodyTemplate>
+        <img width="200" height="200" src="@_currentPhotoSrc"/>
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="form-control d-flex justify-content-between">
+            <Button Color="ButtonColor.Dark" @onclick="PreviousImage">Previous</Button>
+            <Button Color="ButtonColor.Dark" @onclick="DeleteImage"><Icon Name="IconName.TrashFill"></Icon></Button>
+            <Button Color="ButtonColor.Dark" @onclick="NextImage">Next</Button>
+        </div>
+    </FooterTemplate>
+</Modal>
+
+<Modal OnHidden="ShowModel" @ref="_rollOverModal" Title="@($"{_currentReading?.MeterNo} Rollover")" ModalType="ModalType.Dark" BodyCssClass="bg-dark text-light" FooterCssClass="bg-dark text-light">
+    <BodyTemplate>
+        @* <label for="isRollover">Is this a rollover?</label>
+        <InputCheckbox class="mt-2" @bind-Value="@_isRollover" />
+        @if(_isRollover)
+        { *@
+            <br />
+            <p>Maximum digits:</p>
+            <InputNumber  TValue="int?" @bind-Value="@_currentReadingMaxDigits" />
+        @* } *@
+        <p>Calculated Usage: @(CalcUsage(_currentReading.CalcUnits, _currentReading.PreviousReading, (double)_actualReading, (bool)_isRollover, (int)_currentReadingMaxDigits))</p>
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="form-control d-flex justify-content-end">
+            <Button Color="ButtonColor.Dark" @onclick="SetRollOver">Continue</Button>
+        </div>
+    </FooterTemplate>
+</Modal>
+
+<Modal OnHidden="ShowModel" @ref="_noteModal" Title="@_noteTitle" ModalType="ModalType.Dark" BodyCssClass="bg-dark text-light" FooterCssClass="bg-dark text-light">
+    <BodyTemplate>
+            <InputTextArea class="form-control" @bind-Value="_newNote" rows="5"/>
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="form-control d-flex justify-content-between">
+            <Button Color="ButtonColor.Dark" @onclick="CancelNote">Cancel</Button>
+            <Button Color="ButtonColor.Dark" @onclick="SaveNote">Save</Button>
+        </div>
+    </FooterTemplate>
+</Modal>
+
+<Modal OnHidden="ShowModel" @ref="_confirmModal" IsVerticallyCentered=true ModalType="@(AppSettings.DarkMode ? ModalType.Dark : ModalType.Light)" Style="width:90%;margin-left:5%" ShowCloseButton=false BodyCssClass="@(AppSettings.DarkMode ? "bg-dark font-dark bd-radius-7" : "bg-light font-light bd-radius-7")">
+    <BodyTemplate>
+        <div class="mt-2 mb-4">
+            Are you sure you want to continue without saving?
+        </div>
+        <div class="d-flex justify-content-evenly mt-4 mb-2">
+            <button @onclick="ConfirmMove" class="confirm-btn">Yes</button>
+            <button @onclick="RejectMove" class="cancel-btn">No</button>
+        </div>
+    </BodyTemplate>
+</Modal>
+
+@code {
+    [ParameterAttribute]
+    public Guid RequestId { get; set; }
+
+    private Modal _modal;
+    public string _noteTitle;
+    private Modal _imageModal;
+    private Modal _rollOverModal;
+    private Modal _noteModal;
+
+    private Modal _confirmModal;
+    private List<Reading> _readings;
+
+    private List<Reading> _filteredReadings;
+
+    private ReadingListRequest _request;
+
+    private Reading _currentReading;
+    private int _currentReadingIndex;
+    private double? _actualReading;
+    private double? _prevActualReading;
+    private int? _currentReadingMaxDigits;
+    private bool _isRollover;
+    private bool _hasClickedContinueRollover = false;
+
+    private bool _isCaputred = true;
+    private bool _isUnCaputred = true;
+
+    private string _newNote;
+
+    private int _currentPhotoIndex;
+    private string _currentPhotoSrc;
+
+    private string _problemText;
+    private string _moveTo;
+
+    private IAudioRecorder _audioRecorder;
+    private IAudioPlayer _audioPlayer;
+    private bool _isPlyaing = false;
+
+    private int _keyValue = 1;
+
+    private List<ToastMessage> _messages = new List<ToastMessage>();
+    private void ShowReadingOffsetMessage() => ToastService.Notify(CreateToastMessage());
+    private ToastMessage CreateToastMessage()
+    => new ToastMessage
+        {
+            Type = ToastType.Danger,
+            Title = "Usage Warning!",
+            Message = $"The usage exceeds the reading offset. Please double check reading",
+        };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            PreloadService.Show();
+
+            _readings = (await ReadingListService.GetReadingsAsync(RequestId)).OrderBy(r => r.Location).ThenBy(r => r.SequenceNo).ToList();
+            _filteredReadings = _readings;
+            _request = await ReadingListService.GetReadingListRequestAsync(RequestId);
+
+            _audioRecorder = AudioManager.CreateRecorder();
+        }
+        catch
+        {
+            // TODO handle exception
+        }
+        finally
+        {
+            PreloadService.Hide();
+        }
+
+        await base.OnInitializedAsync();
+    }
+
+    private void FilterIsCaptured()
+    {
+        _isCaputred = !_isCaputred;
+        FilterReadings();
+    }
+
+    private void FilterIsUnCaptured()
+    {
+        _isUnCaputred = !_isUnCaputred;
+        FilterReadings();
+    }
+    private void FilterReadings()
+    {
+        if (_isCaputred && _isUnCaputred)
+        {
+            _filteredReadings = _readings;
+        }
+        else if (_isCaputred && !_isUnCaputred)
+        {
+            _filteredReadings = _readings.Where(item => item.IsCaptured).ToList();
+        }
+        else if (!_isCaputred && _isUnCaputred)
+        {
+            _filteredReadings = _readings.Where(item => !item.IsCaptured).ToList();
+        }
+        else
+        {
+            _filteredReadings = new List<Reading>();
+        }
+
+        _keyValue++;
+        StateHasChanged();
+    }
+
+    private string GetRowClass(Reading reading)
+    {
+        if(reading.IsCaptured)
+        {
+            return "row-success";
+        }
+
+        return "";
+    }
+
+    private async Task CancelNote()
+    {
+        await _noteModal.HideAsync();
+    }
+
+    private async Task SaveNote()
+    {
+        _currentReading.NewNote = _newNote;
+        await _noteModal?.HideAsync();
+        await ShowModel();
+    }
+
+    private async Task PlayAudio()
+    {
+        try
+        {
+            if(_audioPlayer is null || !_audioPlayer.IsPlaying)
+            {
+                using var stream = File.OpenRead(_currentReading.VoiceNote);
+                _audioPlayer = AudioManager.CreatePlayer(stream);
+
+                _audioPlayer.Play();
+                _isPlyaing = true;
+            }
+            else
+            {
+                _audioPlayer.Pause();
+            }
+        }
+        catch(Exception e)
+        {
+            _problemText = e.Message;
+        }
+    }
+
+
+    private async Task RecordAudio()
+    {
+        try
+        {
+            if(await Permissions.RequestAsync<Permissions.Microphone>() != PermissionStatus.Granted)
+            {
+                // Handle No permission exception
+                return;
+            }
+
+            if(!_audioRecorder.IsRecording)
+            {
+                await _audioRecorder.StartAsync();
+            }
+            else
+            {
+                var recordedAudio = await _audioRecorder.StopAsync();
+                System.IO.Directory.CreateDirectory(AppSettings.AudioDirectory);
+
+                var localFilePath = Path.Combine(AppSettings.AudioDirectory, $"audio_{Guid.NewGuid()}.wav");
+
+                using Stream audioStream = recordedAudio.GetAudioStream();
+                using FileStream localFileStream = File.OpenWrite(localFilePath);
+
+                await audioStream.CopyToAsync(localFileStream);
+
+                _currentReading.VoiceNote = localFilePath;
+            }
+        }
+        catch(Exception e)
+        {
+            _problemText = e.Message;
+        }
+    }
+
+    private async Task DeleteImage()
+    {
+        var list = _currentReading.PhotosList;
+        list.Remove(_currentReading.PhotosList[_currentPhotoIndex]);
+        _currentReading.Photos = list.Any() ? string.Join("|", list) : null;
+
+        if (list.Any())
+        {
+            // decrease photo index
+            _currentPhotoIndex = Math.Max(0, _currentPhotoIndex - 1);
+        }
+
+        // delete photo
+        ReadingListService.DeletePhotoFile(_currentPhotoSrc);
+
+        await _imageModal?.HideAsync();
+        await _modal?.ShowAsync();
+
+        await SaveReading(dontGoNext:true);
+    }
+
+    private async Task ShowImageModel()
+    {
+        try
+        {
+            if(_currentReading.PhotosList is not null && _currentReading.PhotosList.Count() > 0)
+            {
+                _currentPhotoIndex = 0;
+                _currentPhotoSrc = GetImageBase64StringSrc();
+                await _modal?.HideAsync();
+                await _imageModal?.ShowAsync();
+            }
+        }
+        catch(Exception e)
+        {
+            _problemText = e.Message;
+        }
+    }
+
+    private void NextImage()
+    {
+        var newIndex = _currentPhotoIndex + 1 >= _currentReading.PhotosList.Count() ? 0 : _currentPhotoIndex + 1;
+
+        if(newIndex == _currentPhotoIndex)
+        {
+            return;
+        }
+
+        _currentPhotoIndex = newIndex;
+        _currentPhotoSrc = GetImageBase64StringSrc();
+    }
+
+    private async Task RejectMove()
+    {
+        await _confirmModal?.HideAsync();
+    }
+
+    private void PreviousImage()
+    {
+        var newIndex = _currentPhotoIndex - 1 < 0 ? _currentReading.PhotosList.Count() - 1 : _currentPhotoIndex - 1;
+
+        if(newIndex == _currentPhotoIndex)
+        {
+            return;
+        }
+
+        _currentPhotoIndex = newIndex;
+        _currentPhotoSrc = GetImageBase64StringSrc();
+    }
+
+    private string GetImageBase64StringSrc()
+    {
+        var imageBytes = File.ReadAllBytes(Path.Combine(AppSettings.PhotoDirectory, _currentReading.PhotosList[_currentPhotoIndex]));
+        var image = Convert.ToBase64String(imageBytes);
+        return $"data:image/png;base64,{image}";
+    }
+
+    private async Task ShowModel()
+    {
+        await _modal?.ShowAsync();
+    }
+
+    private async Task OnRowClick(GridRowEventArgs<Reading> args)
+    {
+        SetCurrentReading(args.Item);
+        await _modal?.ShowAsync();
+    }
+
+    private async Task OpenNote()
+    {
+        _newNote = _currentReading.NewNote;
+        await _modal?.HideAsync();
+        if (string.IsNullOrEmpty(_newNote))
+        {
+            _noteTitle = "Add Note";
+        }
+        else
+        {
+            _noteTitle = "Edit Note";
+        }
+        await _noteModal.ShowAsync();
+    }
+
+    private async Task TakePhoto ()
+    {
+        try
+        {
+            if (MediaPicker.Default.IsCaptureSupported)
+            {
+                FileResult photo = await MediaPicker.Default.CapturePhotoAsync();
+
+                if (photo != null)
+                {
+                    System.IO.Directory.CreateDirectory(AppSettings.PhotoDirectory);
+                    // save the file into local storage
+                    string localFilePath = Path.Combine(AppSettings.PhotoDirectory, photo.FileName);
+
+                    using Stream sourceStream = await photo.OpenReadAsync();
+                    using FileStream localFileStream = File.OpenWrite(localFilePath);
+
+                    await sourceStream.CopyToAsync(localFileStream);
+
+                    var photos = _currentReading?.Photos?.Split("|").ToList() ?? new List<string>();
+                    photos.Add(photo.FileName);
+                    _currentReading.Photos = string.Join("|", photos);
+                }
+            }
+
+        }
+        catch(Exception e)
+        {
+            _problemText = e.Message;
+        }
+
+    }
+
+    private async Task SaveReading(bool dontGoNext = false)
+    {
+        try
+        {
+            if (_actualReading is null) _actualReading = 0;
+
+            if(_currentReading.CalcUnits && !_hasClickedContinueRollover && CheckIsRollover(_currentReading.PreviousReading, (double)_actualReading))
+            {
+                await PromptRollOver();
+                return;
+            }
+
+            _currentReading.ActualReading = _actualReading;
+            _currentReading.Usage = CalcUsage(_currentReading.CalcUnits, _currentReading.PreviousReading, (double)_currentReading.ActualReading, _isRollover, _currentReadingMaxDigits);
+            _currentReading.ReadingDate = DateTime.UtcNow.ToShortDateString();
+            _currentReading.RollOver = _isRollover;
+
+            await SetGpsLocation();
+
+            ResetCurrentReading();
+
+            var isBadReading = !CheckIsGoodReading(_currentReading);
+
+            _currentReading.HasAbnormality = isBadReading;
+            _request.ReadingsUploaded = false;
+            _request.Touched = true;
+
+            await ReadingListService.SaveReadingAsync(_currentReading);
+            await ReadingListService.UpdateReadingListRequestAsync(_request);
+
+            if(isBadReading)
+            {
+                ShowReadingOffsetMessage();
+            }
+            else
+            {
+                if(!dontGoNext) SetNextReading();
+                _actualReading = null;
+            }
+        }
+        catch (Exception e)
+        {
+            // handle exception
+        }
+
+    }
+
+    private double CalcUsage(bool calcUnits, double prevReading, double currentReading, bool isRollover, int? maxdigits = 0)
+    {
+        if(!calcUnits)
+        {
+            return currentReading;
+        }
+
+        if(isRollover)
+        {
+            return Math.Pow(10, (int)maxdigits) - prevReading + currentReading;
+        }
+
+        return currentReading - prevReading;
+    }
+
+    private bool CheckIsRollover(double prevReading, double currentReading)
+    {
+        return currentReading < prevReading;
+    }
+
+    private bool CheckIsGoodReading(Reading reading)
+    {
+        if(reading.Usage is null)
+        {
+            return true;
+        }
+
+        if(reading.AverageUsage == 0 && reading.Usage > 0)
+        {
+            return false;
+        }
+
+        var offset = reading.AverageUsage * (reading.ReadingOffset / 100);
+
+        if((double)reading.Usage < (reading.AverageUsage - offset) || (double)reading.Usage > (reading.AverageUsage + offset))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task PromptRollOver()
+    {
+        _isRollover = true;
+        _currentReadingMaxDigits = 7;
+        await _modal?.HideAsync();
+        await _rollOverModal?.ShowAsync();
+    }
+
+    private async Task SetRollOver()
+    {
+        _hasClickedContinueRollover = true;
+        await _rollOverModal.HideAsync();
+        SaveReading();
+    }
+
+    private void SetCurrentReading(Reading reading)
+    {
+        _currentReadingIndex = _filteredReadings.IndexOf(reading);
+        _currentReading = reading;
+        ResetCurrentReading();
+    }
+
+    private async Task SetPreviousReading()
+    {
+        _moveTo = "previous";
+        if (_actualReading is not null)
+        {
+            if(_actualReading != _prevActualReading)
+            {
+                await _confirmModal?.ShowAsync(); 
+            }
+            else 
+            {
+                ConfirmMove();
+            }
+        }
+        else
+        {
+            if(_actualReading != _prevActualReading)
+            {
+                await _confirmModal?.ShowAsync(); 
+            }
+            else 
+            {
+                ConfirmMove();
+            }
+        }
+    }
+
+    private async Task SetNextReading()
+    {
+        _moveTo = "next";
+        if(_actualReading is not null)
+        {
+            if(_actualReading != _prevActualReading)
+            {
+                await _confirmModal?.ShowAsync();   
+            }
+            else
+            {
+                ConfirmMove();
+            }
+        }
+        else 
+        {
+            if(_actualReading != _prevActualReading)
+            {
+                await _confirmModal?.ShowAsync();
+            }
+            else
+            {
+                ConfirmMove();
+            }
+        }
+    }
+
+    private async Task ConfirmMove()
+    {
+        if(_moveTo is "next")
+        {
+            _currentReadingIndex = _currentReadingIndex + 1 >=  _filteredReadings.Count() ? _currentReadingIndex = 0 : _currentReadingIndex + 1;
+
+            _currentReading = _filteredReadings[_currentReadingIndex];
+            ResetCurrentReading();
+            await _confirmModal?.HideAsync();
+        }
+        else
+        {
+            _currentReadingIndex = _currentReadingIndex - 1 < 0 ? _currentReadingIndex = _filteredReadings.Count() - 1 : _currentReadingIndex - 1;
+
+            _currentReading = _filteredReadings[_currentReadingIndex];
+            ResetCurrentReading();
+            await _confirmModal?.HideAsync();
+        }
+    }
+
+    private void ResetCurrentReading()
+    {
+        _actualReading = _currentReading.ActualReading;
+        _prevActualReading = _currentReading.ActualReading; 
+        _currentReadingMaxDigits = null;
+        _isRollover = false;
+        _hasClickedContinueRollover = false;
+    }
+
+    private async Task<GridDataProviderResult<Reading>> ReadingsDataProvider(GridDataProviderRequest<Reading> request)
+    {
+
+        if(request.Sorting.Any())
+        {
+            var sort = request.Sorting.ToList()[0];
+
+            if(sort.SortString.Equals("Sequence"))
+            {
+                if(sort.SortDirection == SortDirection.Descending)
+                {
+                    _filteredReadings = _filteredReadings.OrderByDescending(r => r.SequenceNo).ToList();
+                }
+                else
+                {
+                    _filteredReadings = _filteredReadings.OrderBy(r => r.SequenceNo).ToList();
+                }
+
+            }
+            else if(sort.SortString.Equals("MeterNo"))
+            {
+                if(sort.SortDirection == SortDirection.Descending)
+                {
+                    _filteredReadings = _filteredReadings.OrderByDescending(r => r.MeterNo).ToList();
+                }
+                else
+                {
+                    _filteredReadings = _filteredReadings.OrderBy(r => r.MeterNo).ToList();
+                }
+            }
+            else if(sort.SortString.Equals("Location"))
+            {
+                if(sort.SortDirection == SortDirection.Descending)
+                {
+                    _filteredReadings = _filteredReadings.OrderByDescending(r => r.Location).ToList();
+                }
+                else
+                {
+                    _filteredReadings = _filteredReadings.OrderBy(r => r.Location).ToList();
+                }
+            }
+        }
+
+        return await Task.FromResult(request.ApplyTo(_filteredReadings));
+    }
+
+    public async Task SetGpsLocation()
+    {
+        try
+        {
+            PreloadService.Show();
+            GeolocationRequest request = new GeolocationRequest(GeolocationAccuracy.Medium, TimeSpan.FromSeconds(0.5));
+
+            Location location = await Geolocation.Default.GetLocationAsync(request);
+
+            if (location != null)
+                _currentReading.GpsLat = location.Latitude;
+                _currentReading.GpsLng = location.Longitude;
+        }
+        catch (FeatureNotSupportedException fnsEx)
+        {
+            // Handle not supported on device exception
+        }
+        catch (FeatureNotEnabledException fneEx)
+        {
+            // Handle not enabled on device exception
+        }
+        catch (PermissionException pEx)
+        {
+            // Handle permission exception
+        }
+        catch (Exception ex)
+        {
+            // Unable to get location
+        }
+        finally
+        {
+            PreloadService.Hide();
+        }
+    }
+
+}

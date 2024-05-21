@@ -1,0 +1,231 @@
+﻿@page "/login"
+@using UmfaApp.Models
+@using UmfaApp.Services
+@using UmfaApp.Helpers
+@using UmfaApp.Settings
+
+@inject ILogInService LogInService
+@inject NavigationManager NavManager
+
+<style>
+    body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+}
+
+.curved-div {
+    position: absolute;
+    background-image: url('images/login_background.png');
+    background-size: cover;
+    background-color: #384EA0;
+    height: 200px; /* Adjust as needed */
+    width: 100%;
+    text-align: center;
+    color: white; /* Adjust text color as needed */
+    overflow: hidden;
+    box-shadow: 0 2px 50px 0px rgba(56,78,160,0.8);
+    border-bottom-left-radius: 90% 20%;
+    border-bottom-right-radius: 90% 20%;
+    top: 0;
+    left: 0;
+}
+
+.text-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    /*   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.6); */
+}
+
+    .text-content h1 {
+        font-size: 3em; 
+        margin: 0;
+    }
+
+    .text-content p {
+        font-size: 1.5em; 
+        margin: 0;
+    }
+
+input[type="email"],
+input[type="password"] {
+    border: none;
+    padding: 5px; 
+    background-color: transparent; 
+    outline: none; 
+    border-radius: 0%;
+    border-radius: 0%;
+}
+
+    /* Optional: Hover and focus styles */
+    input[type="email"]:focus,
+    input[type="password"]:focus {
+        /*   border-bottom: 1px solid #666; /* Adjust color on focus */ */ border:none;
+        box-shadow: none; /* Remove shadow on focus */
+    }
+
+.umfa-button {
+    margin-top: 20px;
+    background-color: #384EA0;
+    color: white; 
+    padding: 10px 25px; 
+    font-size: 16px;
+    font-weight: bold; 
+    border: none; 
+    border-radius: 20px; 
+    cursor: pointer;
+    text-align: center; 
+    display: inline-block; 
+    text-decoration: none; 
+}
+
+.unactive-button {
+    background-color: #DEE8F7;
+    color: #637B94;
+}
+
+.curved-div::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #384EA0; 
+    opacity: 0.3;
+}
+
+.input-icon {
+    margin-top: 5px;
+    padding-right: 5px;
+    color: #777777;
+}
+
+.input-group {
+    border-bottom: 2px solid #ccc; /* Bottom border */
+}
+.edit-form {
+    padding-left: 20px;
+    padding-right: 20px;
+}
+
+</style>
+
+<div class="curved-div">
+  <div class="text-content">
+    <h1>UMFA</h1>
+    <hr  style="border-top: 2px solid white; opacity: 100%; margin: 2px;"/>
+    <p>FIELD SERVICE</p>
+  </div>
+</div>
+<div style="height: 250px;">
+</div>
+<EditForm class="edit-form" Model="_loginModel" OnValidSubmit="Submit">
+    <DataAnnotationsValidator />
+    <div class="form-group">
+        <div class="input-group d-flex">
+            <Icon class="input-icon" Name="IconName.EnvelopeFill" />
+            <input type="email" @bind-value="_loginModel.Email" class="form-control" placeholder="Enter email"/>
+        </div>
+        <ValidationMessage For="@(() => _loginModel.Email)" />
+    </div>
+    <div class="mt-2 form-group">
+        <div class="input-group d-flex">
+            <Icon class="input-icon" Name="IconName.LockFill" />
+            <input type="password" @bind-value="_loginModel.Password" class="form-control" placeholder="Enter password" />
+        </div>
+        <ValidationMessage For="@(() => _loginModel.Password)" />
+    </div>
+    <button class="w-100 umfa-button" type="submit" @onclick="(() => _logInOnline = true)"><span class="@_spinnerClassOnline" role="status" aria-hidden="true"></span>SIGN IN</button>
+    <button class="w-100 umfa-button mt-2 unactive-button" type="submit" @onclick="(() => _logInOnline = false)"><span class="@_spinnerClassOffline" role="status" aria-hidden="true"></span>SIGN IN OFFLINE</button>
+</EditForm>
+
+
+
+<p class="text-danger">@_problemText</p>
+
+@code {
+    private LoginModel _loginModel = new();
+
+    private string _spinnerClassOnline = "";
+    private string _spinnerClassOffline = "";
+
+    private string _problemText = "";
+
+    private bool _logInOnline = false;
+
+    private async Task TakePhoto ()
+    {
+        if (MediaPicker.Default.IsCaptureSupported)
+        {
+            FileResult photo = await MediaPicker.Default.CapturePhotoAsync();
+
+            if (photo != null)
+            {
+                // save the file into local storage
+                string localFilePath = Path.Combine(FileSystem.AppDataDirectory,"photos", photo.FileName);
+
+                using Stream sourceStream = await photo.OpenReadAsync();
+                using FileStream localFileStream = File.OpenWrite(localFilePath);
+
+                await sourceStream.CopyToAsync(localFileStream);
+            }
+        }
+    }
+
+    private async Task Submit()
+    {
+        if(_logInOnline)
+        {
+            _spinnerClassOnline = "spinner-border spinner-border-sm";
+            var response = await LogInService.AuthenticateUserOnline(_loginModel);
+
+            if(response is null)
+            {
+                _problemText = "Something went wrong... Cannot log in at this time";
+            }
+            else if (response.IsValidated)
+            {
+                AppSettings.IsLoggedInOnline = true;
+                AppSettings.IsLoggedIn = true;
+                AppSettings.UserId = response.UserId;
+                NavigateAfterSuccessfulLogin();
+            }
+            else
+            {
+                _problemText = response.NotValidatedReason.GetEnumDisplayName();
+            }
+        }
+        else
+        {
+            _spinnerClassOffline = "spinner-border spinner-border-sm";
+            var response = await LogInService.AuthenticateUserOffline(_loginModel);
+
+            if(response.Authenticated)
+            {
+                AppSettings.IsLoggedInOnline = false;
+                AppSettings.IsLoggedIn = true;
+                AppSettings.UserId = response.UserId;
+                NavigateAfterSuccessfulLogin();
+            }
+            else
+            {
+                _problemText = "Incorrect login credentials.";
+            }
+        }
+
+
+        _spinnerClassOnline = "";
+        _spinnerClassOffline = "";
+
+        this.StateHasChanged();
+    }
+
+    private void NavigateAfterSuccessfulLogin()
+    {
+        NavManager.NavigateTo("/active-partner/select");
+    }
+}

@@ -1,0 +1,21 @@
+﻿@page "/"
+@using UmfaApp.Settings;
+
+@inject NavigationManager NavManager;
+
+<h3>AppLaunch</h3>
+
+@code {
+    protected override void OnInitialized()
+    {
+        @if(AppSettings.IsLoggedIn)
+        {
+            NavManager.NavigateTo("/active-partner/select");
+            return;
+        }
+
+        AppSettings.ResetAppSettings();
+
+        NavManager.NavigateTo("/login");
+    }
+}

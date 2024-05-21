@@ -1,0 +1,736 @@
+﻿@page "/reading-lists"
+
+@using System.Text.Json
+@using UmfaApp.Data.Tables;
+@using UmfaApp.Helpers;
+@using UmfaApp.Services;
+@using UmfaApp.Settings;
+
+@inject IReadingListService ReadingListService
+@inject PreloadService PreloadService
+@inject NavigationManager NavManager
+@inject IUmfaService UmfaService
+@inject ToastService ToastService
+@inject IActionLogService LoggingService
+@inject ModalService ModalService
+
+<style>
+
+    .modal-info-table {
+    text-align: center;
+    width: 100%;
+    margin-top: 10px; /* Adjust as needed */
+    margin-bottom: 10px; /* Adjust as needed */
+}
+
+.modal-info-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.modal-info-table td {
+    padding: 5px 10px;
+}
+
+.modal-info-table td:nth-child(odd) {
+    text-align: left;
+    font-weight: bold;
+}
+
+.modal-info-table td:nth-child(even) {
+    text-align: left;
+}
+
+.info-modal-body {
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+    padding: 20px;
+    max-height: 400px; /* Adjust the max-height as needed */
+    overflow-y: auto; /* This makes the modal body scrollable */
+}
+
+.modal-info-header h5 {
+    margin: 0;
+    font-size: 1.1em;
+}
+
+.modal-info-content p {
+    margin: 5px 0;
+}
+
+.modal-info-uploads p {
+    margin: 5px 0;
+}
+
+.upload-label {
+    font-weight: bold;
+}
+
+.upload-error {
+    color: #d9534f;
+    font-size: 0.8em;
+}
+
+.btn-ok {
+    display: block;
+    padding: 10px;
+    padding-left: 30px;
+    padding-right: 30px;
+    border-radius: 5px;
+    font-size: 1em;
+    margin: auto;
+    background-color: white;
+}
+
+    .btn-delete {
+        color: white;
+        display: block;
+        padding: 10px;
+        padding-left: 30px;
+        padding-right: 30px;
+        border-radius: 5px;
+        font-size: 1em;
+        margin: auto;
+        background-color: var(--primary-color);
+        border: none;
+    }
+
+.fixed-button {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 50px;
+    height: 50px;
+    background-color: #384EA0;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 99;
+}
+
+.fixed-button:hover {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 50px;
+    height: 50px;
+    background-color: #384EA0;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 99;
+}
+
+.new-request {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center; 
+    padding: 10px;
+    background-color: #242E46;
+    color: white;
+    cursor: pointer;
+}
+
+.new-request a {
+    display: inline-block; 
+    text-decoration: none; 
+    color: white;
+}
+.accordion-body {
+    padding: 0;
+}
+
+.reading-request-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background-color: var(--accent-color);
+        border-bottom: solid 1px #CAD1D9;
+        padding: 0;
+        padding-left: 5px;
+    }
+
+.reading-request-row:last-child {
+        border-bottom: none;
+    }
+
+.reading-request-text {
+        display: flex;
+        align-items: center;
+        flex-grow: 1; /* this will make the text container grow and fill the space */
+        flex-shrink: 1; /* this will allow the container to shrink */
+        flex-basis: auto; /* this will define the default size of an element before the remaining space is distributed */
+        min-width: 0; /* this will allow the element to shrink below its intrinsic width */
+        margin-right: 10px; /* optional, for some spacing */
+    
+}
+
+
+.reading-request-text p {
+    display: block;
+    margin: 0;
+}
+
+
+.reading-request-buttons {
+
+    flex-shrink: 0; /* Prevent buttons from shrinking */
+    display: flex;
+    align-items: center;
+    height: 100%;
+    float: right;
+    margin: 0;
+    color: black;
+    font-size: 0; /* Remove default space between inline elements */
+}
+
+.reading-request-buttons button {
+    margin: 0;
+    font-size: 16px; /* Reset font size for buttons */
+    border-left: 1px solid #CAD1D9;
+    border-right: 1px solid #CAD1D9;
+    border-radius: 0;
+}
+
+.reading-request-buttons button:first-child {
+   
+    border-right: none;
+}
+
+.reading-request-buttons button:last-child {
+   
+    border-left: none;
+}
+
+.btn-primary {
+    background-color: var(--accent-color);
+}
+
+.reading-request-buttons .btn:hover {
+    margin: 0;
+    border-left: 1px solid #CAD1D9;
+    border-right: 1px solid #CAD1D9;
+    border-radius: 0;
+}
+
+.reading-request-buttons .btn:hover:first-child {
+    border-right: none;
+}
+.reading-request-buttons .btn:hover:last-child {
+    border-left: none;
+}
+
+    .custom-checkbox {
+        background-color: #eee;
+    }
+
+    .custom-checkbox .checkmark {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 20px;
+        width: 20px;
+        background-color: #eee;
+        border: 1px solid #dcdcdc;
+        border-radius: 4px;
+    }
+
+    .custom-checkbox input ~ .checkmark {
+        background-color: #ccc;
+    }
+
+    .custom-checkbox input:checked ~ .checkmark {
+        background-color: #2196F3;
+        border: none;
+    }
+
+    .checkmark:after {
+        content: "";
+        position: absolute;
+        display: none;
+    }
+
+    .custom-checkbox input:checked ~ .checkmark:after {
+        display: block;
+    }
+
+    .custom-checkbox .checkmark:after {
+        left: 7px;
+        top: 3px;
+        width: 5px;
+        height: 10px;
+        border: solid white;
+        border-width: 0 3px 3px 0;
+        -webkit-transform: rotate(45deg);
+        -ms-transform: rotate(45deg);
+        transform: rotate(45deg);
+    }
+
+    .bg-dark {
+        background-color:#212847
+    }
+
+    .bg-light {
+        background-color: #FFFFFF
+    }
+
+    .bg-dark-active {
+        background-color: #3C425E
+    }
+
+    .bg-light-active {
+        background-color: #ECEFF4;
+    }
+
+    .font-light {
+        color: #384EA0;
+    }
+
+    .font-dark {
+        color: #FFFFFF;
+    }
+
+    #custom-accordion .accordion-button {
+        background-color: #1362D9 !important;
+        color: #FFFFFF;
+    }
+
+    #custom-accordion .accordion-button::after {
+        /* position: absolute; */
+    }
+    #custom-accordion .accordion-button:not(.collapsed)::after {
+        background: url('icons/dropdown-white.png') no-repeat left center !important;
+    }
+
+    #custom-accordion .accordion-button::after {
+        background: url('icons/dropdown-white.png') no-repeat left center !important;
+    }
+</style>
+
+<h3 class="page-title">Reading Lists</h3>
+
+@if(OnlineHelper.IsOnline)
+{
+    <div class="container">
+        <Button Class="fixed-button" @onclick="@(() => NavManager.NavigateTo("/create-reading-lists"))"><Icon Name="IconName.Plus" Size="IconSize.x1"/></Button>
+    </div>
+}
+
+@if (_readingLists is not null && _readingLists.Any())
+{
+    <Accordion AlwaysOpen="true" OnShowing="() => _selectedRequests.Clear()" OnHiding="() => _selectedRequests.Clear()" id="@(AppSettings.DarkMode ? "custom-accordion":"")">
+        @foreach (var readingList in _readingLists.OrderBy(r => r.Name))
+        {
+            <AccordionItem name="@readingList.Name">
+                <TitleTemplate>
+                    <div class="w-100">
+                        @readingList.Name
+                    </div>
+                </TitleTemplate>
+                <Content>
+                    @if(OnlineHelper.IsOnline)
+                    {
+
+                        <div class="new-request d-flex justify-content-between align-items-center">
+                            <input class="custom-checkbox" type="checkbox" @onclick="() => CheckAll(readingList.Id)" @onclick:preventDefault="true" checked="@IsAllRequestsSelected(readingList.Id)" />
+                            <div class="flex-grow-1 text-center">Request Latest Period</div>
+                            <div>
+                                <a class="me-4"><Icon Name="IconName.TrashFill" Size="IconSize.x4" @onclick="() => OpenDeleteModal(readingList)" /></a>
+                                <a @onclick="() => CreateNewReadingsRequest(readingList.Id, readingList.BuildingIds, readingList.Locations)"><Icon Name="IconName.PlusCircleFill" Size="IconSize.x4" /></a>
+                            </div>
+                        </div>
+                    }
+                    @foreach (var readingRequest in _readingListRequests.Where(r => r.ReadingListId == readingList.Id).OrderByDescending(rl => rl.CreatedDate))
+                    {
+                        <div class="reading-request-row d-flex justify-content-between @(AppSettings.DarkMode ? "bg-dark" : "bg-light")">
+                            <div class="reading-request-text d-flex align-items-center flex-grow-1">
+                                @if (!readingRequest.Touched || readingRequest.CreatedDate < DateTime.UtcNow.AddMonths(-3))
+                                {
+                                    <input style="flex-shrink: 0;" class="custom-checkbox me-2" type="checkbox" @onclick="() => CheckRequest(readingRequest)" checked="@_selectedRequests.Contains(readingRequest)" />
+                                }
+                                <p style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis;" class="mb-0">@readingRequest.Period | @readingRequest.CreatedDate.ToString("dd/MM/yy HH:mm")</p>
+                            </div>
+
+                            <div class="reading-request-buttons d-flex align-items-center">
+                                <Button @onclick="() => OpenInfoModal(readingRequest.Id)"><Icon Name="IconName.InfoCircle" Color="@(AppSettings.DarkMode ? IconColor.White : IconColor.Dark)"/></Button>
+                                @if(OnlineHelper.IsOnline)
+                                {
+                                    <Button Class="@(readingRequest.ReadingsUploaded ? "btn-success" : "")" @onclick="(async () => await UploadReadings(readingRequest))"><Icon Name="IconName.Upload" Color="@(AppSettings.DarkMode ? IconColor.White : IconColor.Dark)" /></Button>
+                                    <Button Class="@(readingRequest.MediaUploadStatus == Enums.UploadStatus.Uploaded ? "btn-success" : readingRequest.MediaUploadStatus == Enums.UploadStatus.Partial ? "btn-warning" : "")" @onclick="(async () => await UploadMedia(readingRequest))"><Icon Name="IconName.Film" Color="@(AppSettings.DarkMode ? IconColor.White : IconColor.Dark)" /></Button>
+                                }
+                                <Button @onclick="@(() => NavManager.NavigateTo($"capture-readings/{readingRequest.Id}"))"><Icon Name="IconName.ClipboardFill" Color="@(AppSettings.DarkMode ? IconColor.White : IconColor.Dark)" /></Button>
+                            </div>
+                        </div>
+                    }
+                </Content>
+            </AccordionItem>
+        }
+    </Accordion>
+}
+
+<div class="buffer"></div>
+
+<Modal @ref="_infoModal" Title="Info" ModalType="@(AppSettings.DarkMode ? ModalType.Dark : ModalType.Light)" BodyCssClass="@(AppSettings.DarkMode ? "bg-dark font-dark info-modal-body" : "bg-light font-light info-modal-body")">
+    <BodyTemplate>
+        <div class="modal-info-header row">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 style="@(AppSettings.DarkMode ? "color:#FFFFFF":"color:#333")">@_modalRequest.Period | @_modalRequest.CreatedDate.ToString("dd/MM/yy HH:mm")</h5>
+                <a class="py-0" @onclick="OnShareClicked"><Icon Name="IconName.ShareFill" Color="@(AppSettings.DarkMode ? IconColor.Light : IconColor.Dark)"/></a>
+            </div>
+        </div>
+        <div class="modal-info-content">
+            <p><strong>Total readings:</strong> @_modalReadings.Count()</p>
+            <div class="modal-info-table">
+                <table>
+                    <tbody>
+                        <tr>
+                            <td><strong>Captured:</strong></td>
+                            <td>@_modalReadings.Where(r => r.IsCaptured).Count()</td>
+                            <td><strong>With photos:</strong></td>
+                            <td>@_modalReadings.Where(r => r.PhotosList is not null && r.PhotosList.Any()).Count()</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Uncaptured:</strong></td>
+                            <td>@_modalReadings.Where(r => !r.IsCaptured).Count()</td>
+                            <td><strong>Without photos:</strong></td>
+                            <td>@_modalReadings.Where(r => r.PhotosList is null || !r.PhotosList.Any()).Count()</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <hr />
+            <div class="modal-info-uploads">
+                @{
+                    DateTime? previousDate = null;
+                }               
+                @foreach (var log in _modalLogs)
+                {
+                    if(previousDate.HasValue && previousDate.Value.Date != log.ActionDate.Date)
+                    {
+                        <hr />
+                    }
+                    
+                    if(!string.IsNullOrWhiteSpace(log.ErrorMessage))
+                    {
+
+                        <table class="mb-3">
+                            <tr>
+                                <td><Icon Name="IconName.XCircleFill" Color="IconColor.Danger"/></td>
+                                <td><p class="my-0"><span class="upload-label p-0"> @(log.Action):</span> @log.ActionDate.ToString("yy/MM/dd HH:mmtt")</p></td>
+                            </tr>
+                            <tr>
+                                <td></td>
+                                <td><p class="my-0">@log.ErrorMessage</p></td>
+                            </tr>
+                        </table>
+                    }
+                    else{
+                        <p><Icon Name="IconName.CheckCircleFill" Color="IconColor.Success"/> <span class="upload-label">@(log.Action):</span> @log.ActionDate.ToString("yy/MM/dd HH:mmtt")</p>
+                    }
+
+
+                    previousDate = DateTime.UtcNow.AddDays(-1);
+                }
+            </div>
+        </div>
+        <button class="btn-ok @(AppSettings.DarkMode ? "bg-dark font-dark" : "bg-light font-light")" @onclick="CloseInfoModal" style="margin-top:20px; @(AppSettings.DarkMode ? "border:1px solid white": "border:1px solid black")">
+            OK
+        </button>
+    </BodyTemplate>
+</Modal>
+
+
+<Modal @ref="_deleteModal" Title="Delete Reading List" ModalType="@(AppSettings.DarkMode ? ModalType.Dark : ModalType.Light)" BodyCssClass="@(AppSettings.DarkMode ? "bg-dark font-dark info-modal-body" : "bg-light font-light info-modal-body")">
+    <BodyTemplate>
+        <p>Are you sure you want to delete the selected reading list(s)?</p>
+        <div class="d-flex">
+            <button class="btn-ok" @onclick="async () => await DeleteReadingRequests(_deletingList)">Yes</button>
+            <button class="btn-delete" @onclick="CloseDeleteModal">No</button>
+        </div>
+        
+    </BodyTemplate>
+</Modal>
+
+@code {
+
+    private Modal _infoModal;
+    private Modal _deleteModal;
+
+    private ReadingListRequest _modalRequest;
+    private List<ActionLog> _modalLogs = new List<ActionLog>();
+    private List<Reading> _modalReadings = new List<Reading>();
+
+    private List<ReadingList> _readingLists;
+    private List<ReadingListRequest> _readingListRequests;
+
+    private List<ReadingListRequest> _selectedRequests = new List<ReadingListRequest>();
+    private ReadingList _deletingList = new ReadingList();
+
+    private List<ToastMessage> _messages = new List<ToastMessage>();
+    private void ShowToast(string message, string title, ToastType type) => ToastService.Notify(CreateToastMessage(message, title, type));
+    private ToastMessage CreateToastMessage(string message, string title, ToastType type)
+    => new ToastMessage
+        {
+            Type = type,
+            Title = title,
+            Message = message,
+        };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AppSettings.ActivePartner?.Name is null)
+        {
+            NavManager.NavigateTo("/active-partner/select");
+            return;
+        }
+
+        try
+        {
+            PreloadService.Show();
+
+            _readingLists = await ReadingListService.GetReadingListsAsync((int)AppSettings.UserId!, (int)AppSettings.ActivePartner!.PartnerId);
+            _readingListRequests = (await ReadingListService.GetReadingListRequestsAsync(_readingLists.Select(rl => rl.Id).ToList())).ToList();
+
+        }
+        catch (Exception e)
+        {
+            ShowToast(e.Message, "Error", ToastType.Danger);
+        }
+        finally
+        {
+            PreloadService.Hide();
+        }
+
+        await base.OnInitializedAsync();
+    }
+
+    private async Task DeleteReadingRequests(ReadingList list)
+    {
+        await CloseDeleteModal();
+        var requestsToRemove = _selectedRequests.Where(r => r.ReadingListId.Equals(list.Id) && (!r.Touched || r.CreatedDate < DateTime.UtcNow.AddMonths(-3))).ToList();
+        if (!requestsToRemove.Any())
+        {
+            return;
+        }
+
+        try
+        {
+
+            PreloadService.Show();
+
+            await ReadingListService.DeleteReadingListRequestsAsync(requestsToRemove, list);
+
+            _readingListRequests = _readingListRequests.Except(requestsToRemove).ToList();
+
+            if (!_readingListRequests.Where(r => r.ReadingListId.Equals(list.Id)).Any())
+            {
+                _readingLists.Remove(list);
+            }
+
+            ShowToast("Successfully deleted reading list requests", "Success", ToastType.Success);
+        }
+        catch (Exception e)
+        {
+            ShowToast(e.Message, "Error", ToastType.Danger);
+        }
+        finally
+        {
+            PreloadService.Hide();
+        }
+
+    }
+
+    private bool IsAllRequestsSelected(Guid listId)
+    {
+        // Check if all requests in the list are selected
+        return _readingListRequests
+            .Where(r => r.ReadingListId == listId)
+            .All(r => _selectedRequests.Contains(r));
+    }
+
+    private void CheckAll(Guid listId)
+    {
+        if (!_readingListRequests.Where(r => r.ReadingListId == listId).Except(_selectedRequests).Any())
+        {
+            _selectedRequests.Clear();
+        }
+        else
+        {
+            _selectedRequests.AddRange(_readingListRequests.Where(r => r.ReadingListId.Equals(listId) && (!r.Touched || r.CreatedDate < DateTime.UtcNow.AddMonths(-3)) && !_selectedRequests.Contains(r)));
+        }
+
+    }
+
+    private void CheckRequest(ReadingListRequest request)
+    {
+        if (_selectedRequests.Contains(request))
+        {
+            _selectedRequests.Remove(request);
+        }
+        else
+        {
+            _selectedRequests.Add(request);
+        }
+    }
+
+    private async Task OpenDeleteModal(ReadingList list)
+    {
+        _deletingList = list;
+        await _deleteModal?.ShowAsync();
+    }
+
+    private async Task CloseDeleteModal()
+    {
+        await _deleteModal?.HideAsync();
+    }
+
+    private async Task OpenInfoModal(Guid requestId)
+    {
+        _modalRequest = _readingListRequests.FirstOrDefault(r => r.Id.Equals(requestId));
+        _modalLogs = await LoggingService.GetLogsByReadingListId(requestId);
+        _modalReadings = await ReadingListService.GetReadingsAsync(requestId);
+
+        await _infoModal?.ShowAsync();
+    }
+
+    private async Task CloseInfoModal()
+    {
+        await _infoModal?.HideAsync();
+    }
+
+    private async Task OnShareClicked()
+    {
+        // Set up the data you want to share
+        await Share.Default.RequestAsync(new ShareTextRequest
+        {
+            Title = "Reading List Logs",
+            Text = $"{JsonSerializer.Serialize(_modalLogs)}",
+            // You can also set a Uri property if you want to share a link
+        });
+        
+    }
+
+    private async Task UploadReadings(ReadingListRequest readingsRequest)
+    {
+        try
+        {
+            PreloadService.Show();
+
+            var error = await ReadingListService.UploadReadingsAsync((int)AppSettings.UserId!, AppSettings.DeviceId, readingsRequest);
+
+            if (error is not null)
+            {
+                await LoggingService.AddLog(Enums.Action.UploadReadings, (int)AppSettings.UserId!, JsonSerializer.Serialize(readingsRequest), readingsRequest.Id, error);
+                ShowToast(error, "Error", ToastType.Danger);
+            }
+            else
+            {
+                await LoggingService.AddLog(Enums.Action.UploadReadings, (int)AppSettings.UserId!, JsonSerializer.Serialize(readingsRequest), readingsRequest.Id);
+                ShowToast("Readings Uploaded Successfully", "Success", ToastType.Success);
+            }
+
+        }
+        catch (Exception e)
+        {
+            await LoggingService.AddLog(Enums.Action.UploadReadings, (int)AppSettings.UserId!, JsonSerializer.Serialize(readingsRequest), readingsRequest.Id, e.Message);
+            ShowToast(e.Message, "Error", ToastType.Danger);
+        }
+        finally
+        {
+            PreloadService.Hide();
+        }
+    }
+
+    private async Task UploadMedia(ReadingListRequest readingsRequest)
+    {
+        try
+        {
+            PreloadService.Show();
+
+#if ANDROID
+        var context = Android.App.Application.Context;
+        var intent = new Android.Content.Intent(context, typeof(UmfaApp.Platforms.Android.UploadMediaServiceAndroid));
+        // Serialize the parameters and put them in the intent
+
+        var request = new Models.UploadMediaRequest
+            {
+                UserId = (int)AppSettings.UserId,
+                DeviceId = (string)AppSettings.DeviceId,
+                Request = readingsRequest
+
+            };
+        intent.PutExtra("request", System.Text.Json.JsonSerializer.Serialize(request));
+        context.StartService(intent);
+        ShowToast("Media upload is running in the background/queued", "Upload Scheduled", ToastType.Info);
+#else
+            var error = await ReadingListService.UploadMediaAsync((int)AppSettings.UserId!, AppSettings.DeviceId, readingsRequest);
+
+            if (error is not null)
+            {
+                ShowToast(error, "Error", ToastType.Danger);
+            }
+            else
+            {
+                ShowToast("Readings Uploaded Successfully", "Success", ToastType.Success);
+            }
+#endif
+        }
+        catch (Exception e)
+        {
+            await LoggingService.AddLog(Enums.Action.UploadMedia, (int)AppSettings.UserId!, JsonSerializer.Serialize(readingsRequest), readingsRequest.Id, e.Message);
+            ShowToast(e.Message, "Error", ToastType.Danger);
+        }
+        finally
+        {
+            PreloadService.Hide();
+        }
+    }
+
+    private async Task CreateNewReadingsRequest(Guid readingListId, string buildingIds, string locations)
+    {
+        try
+        {
+            PreloadService.Show();
+            var readings = await UmfaService.GetReadingList(buildingIds, locations);
+
+            if (readings is null || !readings.Any())
+            {
+                 await LoggingService.AddLog(Enums.Action.GetLatestPeriod, (int)AppSettings.UserId!, readingListId.ToString(), null, "Could not retrieve readings");
+            }
+            else
+            {
+                var request = await ReadingListService.CreateNewReadingsRequestAsync(readingListId, readings[0].PeriodName, readings);
+
+                if (request is null)
+                {
+                    await LoggingService.AddLog(Enums.Action.GetLatestPeriod, (int)AppSettings.UserId!, $"Id {readingListId}, Period {readings[0]?.PeriodName}, Readings: {JsonSerializer.Serialize(readings)}", null,"Could not create request");
+                }
+                else
+                {
+                    await LoggingService.AddLog(Enums.Action.GetLatestPeriod, (int)AppSettings.UserId!, null, request.Id);
+                    _readingListRequests.Add(request);
+                }
+            }
+        }
+        catch(Exception e)
+        {
+            await LoggingService.AddLog(Enums.Action.GetLatestPeriod, (int)AppSettings.UserId!, $"Id: {readingListId} Buildings: {buildingIds} Locations:{locations}", null, e.Message);
+        }
+        finally
+        {
+            PreloadService.Hide();
+        }
+
+    }
+}

@@ -1,0 +1,306 @@
+﻿@using UmfaApp.Helpers;
+@using UmfaApp.Settings;
+@inherits LayoutComponentBase
+
+@inject NavigationManager NavManager
+
+<style>
+    .side-bar-header{
+        margin: 0;
+        width: 100%;
+        background-color: #384EA0;
+        background: linear-gradient(270deg, #1D2C64 0%, #394FA3 100%);
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        color: white;
+        justify-content: center;
+    }
+    .side-bar-header h1{
+        padding-top: 15px;
+        padding-bottom: 15px;
+    }
+
+
+    .custom-offcanvas .offcanvas-header, 
+    .custom-offcanvas .offcanvas-body {
+    padding: 0;
+    margin: 0;
+    }
+
+    .navigation-item{
+        padding-left: 10px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+        color: #566787;
+    }
+    
+    .navigation-item p {
+        padding-top: 14px;
+        margin-left: 10px;
+        margin-right: 10px;
+        margin-top: 0;
+    }
+    
+    a {
+        text-decoration:none;
+        color: #566787;
+    }
+    
+    .active-link{
+        color: #384EA0;
+        background-color: #ECEFF4;
+    }
+
+    .main-header{
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1;
+        background-color: #384EA0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        width: 100%;
+
+    }
+
+    .main-header button{
+        background-color: #384EA0;
+        border: none;
+        color: white;
+        z-index: 99;
+        
+    }
+
+
+    .my-content{
+        margin-top: 55px;
+    }
+
+    .offcanvas {
+        width: 80%;
+    }
+
+    .fixed-bottom {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+    }
+
+    .sub-menu {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    .d-flex {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        padding-right: 30px;
+    }
+
+    .border-top {
+        border-top: 1px solid grey;
+    }
+
+    .bg-dark {
+        color: #FFFFFF !important;
+        background-color:#212847
+    }
+
+    .bg-light {
+        color: #384EA0 !important;
+        background-color: #FFFFFF
+    }
+
+    .bg-dark-active {
+        background-color: #3C425E
+    }
+
+    .bg-light-active {
+        background-color: #ECEFF4;
+    }
+
+    .font-light {
+        /* color: #384EA0; */
+    }
+
+    .font-dark {
+        color: #FFFFFF;
+    }
+
+    #custom-toast .toast-body {
+        background-color: black !important;
+        color: white !important;
+    }
+
+    #custom-toast .toast-header {
+        background-color: black !important;
+        color: white !important;
+    }
+
+</style>
+
+<div class="bb-page">
+    @if(AppSettings.IsLoggedIn)
+    {
+        <Offcanvas @ref="offcanvas" BodyCssClass="@(AppSettings.DarkMode ? "bg-dark" : "bg-light")" Class="custom-offcanvas" Placement="Placement.Start" Size="OffcanvasSize.Small" ShowCloseButton="false">
+            <HeaderTemplate>
+                <div class="side-bar-header d-flex" >
+                    @if(AppSettings.ActivePartner is null)
+                    {
+                        <h1>UMFA Field Service</h1>
+                    }
+                    else
+                    {
+                        <h1>@AppSettings.ActivePartner.Name</h1>
+                    }
+                </div>
+            </HeaderTemplate>
+            <BodyTemplate>
+                <div class="">
+                    @foreach (var item in navItems)
+                    {
+                        <NavLink @onclick="CloseSideBar" href="@item.Href" class="@(AppSettings.DarkMode ? "navigation-item font-dark" : "navigation-item font-white")" ActiveClass="@(AppSettings.DarkMode ? "bg-dark-active" : "bg-light-active")">
+                            <Icon Name="item.IconName"/><p>@item.Text</p>
+                        </NavLink>  
+                    }
+                    <div class="border-top">
+                        <div class="navigation-item d-flex">
+                            <label class="@(AppSettings.DarkMode ? "font-dark" : "font-white")">Dark Mode</label>
+                            <div>
+                                <Switch Value="DarkMode" ValueExpression="() => DarkMode" ValueChanged="SwitchChanged" />
+                            </div>  
+                        </div>
+                    </div>
+                    <div class="fixed-bottom">
+                        <NavLink @onclick="LogOut" class="@(AppSettings.DarkMode ? "navigation-item font-dark" : "navigation-item font-white")" ActiveClass="@(AppSettings.DarkMode ? "bg-dark-active" : "bg-light-active")">
+                            <Icon Name="IconName.BoxArrowInLeft" Size="IconSize.x4" /><p>Logout</p>
+                        </NavLink>
+                    </div>
+                </div>
+            </BodyTemplate>
+        </Offcanvas>
+    }
+
+    
+    
+    <main>
+        
+        @if (AppSettings.IsLoggedIn)
+        {
+            <div class="main-header">
+                @if (NavManager.Uri.Replace(NavManager.BaseUri, "") is "create-reading-lists")
+                {
+                    <button @onclick="MoveToReadingLists"><Icon Name="IconName.ArrowLeft" Size="IconSize.x4" /></button>
+                    <h3>@AppSettings.CurrentTitle</h3>
+                    <button @onclick="Reload"><Icon Name="IconName.ArrowClockwise" Size="IconSize.x4" /></button>
+                }
+                else if (NavManager.Uri.Replace(NavManager.BaseUri, "") is "active-partner/select")
+                {
+                    <button @onclick="ShowOffcanvasAsync"><Icon Name="IconName.JustifyLeft" Size="IconSize.x4" /></button>
+                    <h3>@AppSettings.CurrentTitle</h3>                
+                }
+                else if (NavManager.Uri.Replace(NavManager.BaseUri, "").Contains("capture-readings"))
+                {
+                    <button @onclick="MoveToReadingLists"><Icon Name="IconName.ArrowLeft" Size="IconSize.x4" /></button>
+                    <h3>@AppSettings.CurrentTitle</h3>
+                }  
+                else
+                {
+                    <button @onclick="ShowOffcanvasAsync"><Icon Name="IconName.JustifyLeft" Size="IconSize.x4" /></button>
+                    <h3>@AppSettings.CurrentTitle</h3>
+                    <button @onclick="Reload"><Icon Name="IconName.ArrowClockwise" Size="IconSize.x4" /></button>
+                } 
+            </div>
+        }
+        
+        <article class="my-content">
+            @Body
+        </article>
+    </main>
+</div>
+
+<Preload />
+<Toasts id="@(AppSettings.DarkMode ? "custom-toast":"")" class="p-3" AutoHide="true" Delay="4000" Placement="ToastsPlacement.BottomCenter" />
+<Modal IsServiceModal="true" />
+
+
+
+@code {
+
+    private Offcanvas offcanvas;
+    private string CurrentUri;
+    IEnumerable<NavItem> navItems = new List<NavItem>();
+    private bool DarkMode = false;
+
+    protected override void OnInitialized()
+    {
+        CurrentUri = NavManager.Uri.Replace(NavManager.BaseUri, "");
+        DarkMode = AppSettings.DarkMode;
+
+        BuildNavList();
+
+        base.OnInitialized();
+    }
+
+    private void BuildNavList()
+    {
+        navItems = OnlineHelper.IsOnline ? new List<NavItem>
+        {
+            new NavItem { Href = "/active-partner/select", IconName = IconName.PersonFill, Text = AppSettings.ActivePartner?.Name ?? "Select Active Partner"},
+            new NavItem { Href = "/reading-lists", IconName = IconName.ClipboardFill, Text = "Reading Lists"},
+            new NavItem { Href = "/create-reading-lists", IconName = IconName.PlusCircleFill, Text = "New Reading List"},
+            new NavItem { Href = "/logs", IconName = IconName.BookFill, Text = "Logs"},
+        } :
+       new List<NavItem>
+            {
+                new NavItem { Href = "/active-partner/select", IconName = IconName.PersonFill, Text = AppSettings.ActivePartner?.Name ?? "Select Active Partner"},
+                new NavItem { Href = "/reading-lists", IconName = IconName.ClipboardFill, Text = "Reading Lists"},
+                new NavItem { Href = "/logs", IconName = IconName.BookFill, Text = "Logs"},
+            };
+    }
+
+    private async Task ShowOffcanvasAsync()
+    {
+        BuildNavList();
+        await offcanvas?.ShowAsync();
+    }
+
+    private void LogOut()
+    {
+        AppSettings.ResetAppSettings();
+        NavManager.NavigateTo("/login");
+    }
+
+    private async Task CloseSideBar()
+    {
+        await offcanvas?.HideAsync();
+    }
+
+    private void MoveToReadingLists()
+    {
+        NavManager.NavigateTo("/reading-lists");
+    }
+
+    private void Reload()
+    {
+        NavManager.NavigateTo(NavManager.Uri, forceLoad: true);
+    }
+
+    private void SwitchChanged(bool value)
+    {
+        DarkMode = value;
+        AppSettings.DarkMode = value;
+        Reload();
+        StateHasChanged();
+        base.OnInitialized();
+    }
+}

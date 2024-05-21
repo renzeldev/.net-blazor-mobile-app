@@ -1,0 +1,71 @@
+﻿@page "/logs"
+
+@using System.Text.Json
+@using UmfaApp.Data.Tables
+@using UmfaApp.Services
+
+@inject PreloadService PreloadService
+@inject IActionLogService LoggingService
+
+<h3 class="page-title">Logs</h3>
+
+@if(_logs is null || !_logs.Any())
+{
+    <p>No Logs</p>
+}
+else
+{
+    <Grid 
+    TItem="ActionLog" 
+    AllowRowClick="true"
+    DataProvider="LogsDataProvider"
+    class="table table-hover table-bordered" 
+    AllowFiltering="true" 
+    AllowSorting="true"
+    Responsive="true" 
+    AllowPaging="false"
+    THeadCssClass ="capture-readings-th"
+    ItemsPerPageText="10" 
+    PageSizeSelectorItems="@(new int[] { 5,10,20 })" 
+    PaginationItemsTextFormat="">
+    <GridColumn TItem="ActionLog" HeaderText="Action" PropertyName="Action" SortString="Action" SortKeySelector="item => item.Action" Filterable="false">
+        <p>@context.Action</p>
+    </GridColumn>
+    <GridColumn TItem="ActionLog" HeaderText="Error" PropertyName="Error" SortString="Error" SortKeySelector="item => item.ErrorMessage">
+        <p>@context.ErrorMessage</p>
+    </GridColumn>
+    <GridColumn TItem="ActionLog" HeaderText="Date" PropertyName="Date" SortString="Date" SortKeySelector="item => item.ActionDate">
+        <p>@context.ActionDate</p>
+    </GridColumn>
+</Grid>
+}
+
+
+@code {
+    private List<ActionLog> _logs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            PreloadService.Show();
+
+            _logs = await LoggingService.GetLogs();
+        }
+        catch
+        {
+            // TODO handle exception
+        }
+        finally
+        {
+            PreloadService.Hide();
+        }
+
+        await base.OnInitializedAsync();
+    }
+
+    private async Task<GridDataProviderResult<ActionLog>> LogsDataProvider(GridDataProviderRequest<ActionLog> request)
+    {
+        return await Task.FromResult(request.ApplyTo(_logs));
+    }
+}

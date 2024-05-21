@@ -1,0 +1,181 @@
+﻿@page "/active-partner/select"
+@using UmfaApp.Models;
+@using UmfaApp.Services;
+@using UmfaApp.Settings;
+
+@inject PreloadService PreloadService
+@inject IUmfaService UmfaService
+@inject NavigationManager NavManager
+@inject IPartnerService PartnerService
+
+<style>
+
+    body {
+        margin: 0px;
+        padding: 0px;
+    }
+
+    .partner-table {
+        width: 100%; /* Set table width to 100% */
+        padding: 0px;
+        margin: 0px;
+        box-sizing: border-box; /* Ensures padding does not add to the width */
+    }
+
+    .partner-table td {
+        padding-top: 15px;
+        padding-bottom: 15px;
+        border-top: 1.1px solid #AEB4C0;
+        border-bottom: 1.1px solid #AEB4C0;
+    }
+
+    .selected {
+        background-color: #ECEFF4;
+    }
+
+    .top-row, article {
+     padding-left: 0 !important; 
+     padding-right: 0 !important;
+
+
+    }
+
+    .partner-row {
+        display: flex;
+        align-items: center;
+    }
+
+    .bg-dark {
+        background-color:#212847
+    }
+
+    .bg-light {
+        background-color: #FFFFFF
+    }
+
+    .bg-dark-active {
+        background-color: #3C425E
+    }
+
+    .bg-light-active {
+        background-color: #ECEFF4;
+    }
+
+    .font-light {
+        color: #384EA0;
+    }
+
+    .font-dark {
+        color: #FFFFFF;
+    }
+</style>
+
+<h3 class="page-title">Select Partner</h3>
+
+@if(_partners is not null && _partners.Any())
+{
+    <div class="@(AppSettings.DarkMode ? "bg-dark" : "bg-light")">
+        <Grid 
+            TItem="Partner" 
+            AllowRowClick="true"
+            Class="table table-hover table-bordered text-nowrap" 
+            DataProvider="PartnersDataProvider" 
+            AllowFiltering="true" 
+            Responsive="true" 
+            AllowPaging="false"
+            RowClass="GetRowClass" 
+            ItemsPerPageText="10" 
+            PageSizeSelectorItems="@(new int[] { 5,10,20 })" 
+            PaginationItemsTextFormat=""
+            OnRowClick="OnRowClick">
+            <GridColumn TItem="Partner" PropertyName="Name">
+                <div class="partner-row">
+                    <input type="checkbox" class="custom-radio bg-light" checked="@(AppSettings.ActivePartner?.Name == context.Name)">
+                    <span class="@(AppSettings.DarkMode ? "font-dark ps-2" : "font-light ps-2")">@context.Name</span>
+                </div>
+                
+            </GridColumn>
+        </Grid>
+    </div>
+}
+
+@code {
+
+    private List<Partner> _partners;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _partners = await GetPartnersAsync((int)AppSettings.UserId!);
+
+        @if(_partners?.Count == 1)
+        {
+            AppSettings.ActivePartner = _partners.FirstOrDefault();
+            NavManager.NavigateTo("/dashboard");
+        }
+
+        await base.OnInitializedAsync();
+    }
+
+    private string GetRowClass(Partner partner)
+    {
+        if (AppSettings.ActivePartner?.PartnerId == partner.PartnerId)
+        {
+            if(AppSettings.DarkMode is not true)
+            {
+                return "selected";
+            }
+            return string.Empty;
+        }
+        return string.Empty;
+    }
+
+    private void OnRowClick(GridRowEventArgs<Partner> args)
+    {
+        AppSettings.ActivePartner = args.Item;
+        NavManager.NavigateTo("/reading-lists");
+    }
+
+    private async Task<List<Partner>> GetPartnersAsync(int userId)
+    {
+        try
+        {
+            PreloadService.Show();
+
+            if(AppSettings.IsLoggedInOnline)
+            {
+                var partners = await UmfaService.GetPartnersAsync(userId);
+                await AddNewPartnersAsync(partners);
+                return partners;
+            }
+
+            return (await PartnerService.GetLocalPartners(userId)).Select(p => new Partner(p)).ToList();
+        }
+        catch
+        {
+            // handle exception
+        }
+        finally
+        {
+            PreloadService.Hide();
+        }
+
+        return null;
+    }
+
+    private async Task AddNewPartnersAsync(List<Partner> partners)
+    {
+        try
+        {
+            await PartnerService.AddNewPartners((int)AppSettings.UserId!, partners);
+        }
+        catch
+        {
+            // handle exception
+        }
+    }
+
+    private async Task<GridDataProviderResult<Partner>> PartnersDataProvider(GridDataProviderRequest<Partner> request)
+    {
+        return await Task.FromResult(request.ApplyTo(_partners));
+    }
+}

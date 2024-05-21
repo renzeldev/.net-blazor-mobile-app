@@ -1,0 +1,424 @@
+﻿@page "/create-reading-lists"
+
+@using System.Text.Json
+@using UmfaApp.Models.UmfaApiModels.RequestModels;
+@using UmfaApp.Models.UmfaApiModels.ResponseModels;
+@using UmfaApp.Services;
+@using UmfaApp.Settings;
+
+@inject IUmfaService UmfaService
+@inject NavigationManager NavManager
+@inject PreloadService PreloadService
+@inject IReadingListService ReadingListService
+@inject IActionLogService LoggingService
+
+<style>
+    .custom-checkbox{
+        z-index: 99;
+    }
+
+    .add-dropdown {
+        appearance: menulist;
+    }
+
+    .form-control {
+        border-radius: 0;
+    }
+
+    .form-control:focus, 
+    .form-select:focus {
+        border-color: #ced4da; /* Set your desired border color on focus */
+        outline: 0; /* Remove the default browser outline */
+        box-shadow: none; /* Remove any box shadow */
+    }
+
+    .client {
+        background-color: var(--accent-color);
+    }
+
+    .buildings-header {
+        background-color:  #242E46;
+        color: white;
+        text-align: center;
+        padding: 10px;
+    }
+
+    .buildings-container {
+        display: flex;
+        flex-wrap: wrap;
+        padding: 0;
+    }
+    
+    .building {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid #ced4da;
+        padding: 5px
+    }
+
+    .building:last-child {
+        border-bottom: none;
+    }
+
+    .header-checkbox {
+        margin-left: auto;
+        /* Additional styling for checkbox if needed */
+    }
+
+    .fixed-button {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 50px;
+    height: 50px;
+    background-color: #384EA0;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 99;
+}
+
+.fixed-button:hover {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 50px;
+    height: 50px;
+    background-color: #384EA0;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 99;
+}
+
+.custom-select-light {
+    appearance: none !important;
+    background: url('images/popup-dark.png') no-repeat right center;
+    background-position: calc(100% - 10px) center;
+}
+
+.custom-select-dark {
+    appearance: none !important;
+    background: url('images/popup-light.png') no-repeat right center;
+    background-position: calc(100% - 10px) center;
+}
+
+.bg-dark {
+    background-color:#212847
+}
+
+.bg-light {
+    background-color: #FFFFFF
+}
+
+.bg-dark-active {
+    background-color: #3C425E
+}
+
+.bg-light-active {
+    background-color: #ECEFF4;
+}
+
+.font-light {
+    color: #384EA0;
+}
+
+.font-dark {
+    color: #FFFFFF;
+}
+
+#light-custom-accordion .accordion-button {
+    background-position-x: 8%;
+}
+
+#light-custom-accordion .accordion-button::after {
+    position: absolute;
+}
+
+#dark-custom-accordion .accordion-button {
+    background-color: #1362D9 !important;
+    color: #FFFFFF;
+}
+
+#dark-custom-accordion .accordion-button::after {
+    position: absolute;
+}
+#dark-custom-accordion .accordion-button:not(.collapsed)::after {
+    background: url('icons/dropdown-white.png') no-repeat left center !important;
+}
+
+#dark-custom-accordion .accordion-button::after {
+    background: url('icons/dropdown-white.png') no-repeat left center !important;
+}
+</style>
+
+<h5 class="page-title">New Reading List</h5>
+
+<div class="">
+    <div class="buildings-header">
+        <label for="clientSelect">Client</label>
+    </div>
+    
+    <div class="flex-fill @(AppSettings.DarkMode ? "bg-dark" : "bg-light")">
+        <select id="clientSelect" class="form-control add-dropdown w-100 @(AppSettings.DarkMode ? "custom-select-dark font-dark" : "custom-select-light font-light")" @onchange="HandleClientSelectChange">
+            @if (_locations is not null && _locations.Any())
+            {
+                @foreach ((int id, string name) client in _clients)
+                {
+                    <option value="@client.id" class="@(AppSettings.DarkMode ? "bg-dark font-dark" : "bg-light font-light")">@client.name</option>
+                }
+            }
+        </select>
+    </div>
+</div>
+
+@if (_selectedClientId is not null)
+{
+    <div class="buildings-header">
+        <span>Buildings</span>
+    </div>
+
+    <div class="buildings-container form-control">
+        @foreach ((int id, string name) building in _buildings)
+        {
+            <div class="building @(AppSettings.DarkMode ? "bg-dark font-dark" : "bg-light font-light")">
+                <label for="building_@building.id">@building.name</label>
+                <input class="header-checkbox custom-checkbox bg-light" type="checkbox" id="building_@building.id" value="@building.id" @onchange="() => HandleBuildingCheckboxChange(building.id)" checked="@(_selectedBuildingIds.Contains(building.id))" />
+            </div>
+        }
+    </div>
+}
+
+@* <Button Class="fixed-button-left" Color="ButtonColor.Primary" @onclick="@(() => NavManager.NavigateTo("/create-reading-lists", true))"><Icon Name="IconName.ArrowClockwise" Size="IconSize.x1"/></Button> *@
+
+
+@if(_selectedLocations is not null && _selectedLocations.Any())
+{
+    <Button Class="fixed-button" Color="ButtonColor.Primary" @onclick="OnShowModalClick"><Icon Name="IconName.Plus" Size="IconSize.x1"/></Button>
+}
+
+@if (_selectedBuildingIds is not null && _selectedBuildingIds.Any())
+{
+    <div class="buildings-header">
+        <label>Locations</label>
+    </div>
+    
+    <Accordion 
+        @ref="_accordion"
+        id="@(AppSettings.DarkMode ? "dark-custom-accordion":"light-custom-accordion")"
+        AlwaysOpen="true">
+        @foreach ((int id, string name) building in _buildings.Where(b => _selectedBuildingIds.Contains(b.Id)))
+        {
+            <AccordionItem Name="@building.id.ToString()" Class="@(AppSettings.DarkMode ? "bg-dark font-dark" : "bg-light font-light")">
+                <TitleTemplate>
+                    <div class="w-100" style="padding-left: 35px">
+                        <input 
+                            type="checkbox" 
+                            class="float-end custom-checkbox bg-light" 
+                            checked="@(IsAllLocationsSelectedForBuilding(building.id))"
+                            @onclick:stopPropagation
+                            @onclick="() => SelectAllLocationsForBuilding(building.id)"
+                            @onchange="() => _clickedHeader = true"/>
+                        @building.name
+                    </div>
+                </TitleTemplate>
+                <Content>
+                    @foreach ((string Name, int BuildingId) location in _locations.Where(m => m.BuildingId.Equals(building.id)).Select(m => (m.Location, m.BuildingId)).OrderBy(l => l.Location))
+                    {
+                        <div class="w-100 pb-4">
+                            <input 
+                                type="checkbox" 
+                                class="float-end custom-checkbox bg-light" 
+                                checked="@_selectedLocations.Contains(location)"
+                                @onchange="() => OnLocationCheckChange(location)"/>
+                            @location.Name
+                        </div>
+                    }
+                </Content>
+            </AccordionItem>
+        }
+    </Accordion>
+    
+}
+
+<div class="buffer"></div>
+
+<Modal @ref="_modal" Title="Enter Reading List Name">
+    <BodyTemplate>
+        <input type="text" class="form-control" @bind="_newListName" />
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="OnHideModalClick">Cancel</Button>
+        <Button Color="ButtonColor.Primary" @onclick="CreateReadingListAsync">Create</Button>
+    </FooterTemplate>
+</Modal>
+
+@code {
+
+    private Accordion _accordion = default!;
+
+    private List<PartnerClientBuildingService> _locations = new List<PartnerClientBuildingService>();
+
+    private IEnumerable<(int Id, string Name)> _clients;
+    private int? _selectedClientId;
+
+    private IEnumerable<(int Id, string Name)> _buildings => _locations?.Where(s => s.ClientId.Equals(_selectedClientId)).Select(s => (s.BuildingId, s.BuildingName)).Distinct().OrderBy(b => b.BuildingName);
+    private List<int> _selectedBuildingIds = new List<int>();
+
+    private List<(string Name, int BuildingId)> _selectedLocations = new List<(string Name, int BuildingId)>();
+
+    private bool _clickedHeader = false;
+
+    private string _newListName;
+
+    private Modal _modal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            PreloadService.Show();
+
+            @if (AppSettings.ActivePartner is null)
+            {
+                // TODO add redirect?
+                NavManager.NavigateTo("active-partner/select");
+                return;
+            }
+
+            _locations = await UmfaService.GetPartnerClientBuildingServicesAsync(new PartnerClientBuildingServicesRequest
+                {
+                    PartnerId = AppSettings.ActivePartner.PartnerId,
+                    UserId = AppSettings.UserId,
+                });
+
+            _clients = _locations.Select(s => (s.ClientId, s.ClientName)).Distinct().OrderBy(c => c.ClientName);
+
+            _selectedClientId = _clients.FirstOrDefault().Id;
+        }
+        catch
+        {
+            // TODO handle exception
+        }
+        finally
+        {
+            PreloadService.Hide();
+        }
+
+
+        await base.OnInitializedAsync();
+    }
+
+    private void SelectAllLocationsForBuilding(int buildingId)
+    {
+        if(IsAllLocationsSelectedForBuilding(buildingId))
+        {
+            _selectedLocations.RemoveAll(l => l.BuildingId.Equals(buildingId));
+        }
+        else
+        {
+            var locationsToAdd = _locations.Select(l => (l.Location, l.BuildingId)).Where(l => l.BuildingId == buildingId && !_selectedLocations.Contains(l)).ToList();
+            _selectedLocations.AddRange(locationsToAdd);
+        }
+    }
+
+    private async Task OnShowModalClick()
+    {
+        await _modal?.ShowAsync();
+    }
+
+    private async Task OnHideModalClick()
+    {
+        await _modal?.HideAsync();
+    }
+
+    private async Task CreateReadingListAsync()
+    {
+        
+        try
+        {
+            await _modal?.HideAsync();
+            PreloadService.Show();
+            var response = await UmfaService.GetReadingList(_selectedBuildingIds, _selectedLocations.Select(l => l.Name).ToList());
+
+            if(response is null)
+            {
+                // TODO handle exception
+                return;
+            }
+
+            var newListId = await ReadingListService.CreateNewReadingListAsync(_newListName, (int)AppSettings.UserId!, AppSettings.ActivePartner!.PartnerId, _selectedBuildingIds, _selectedLocations.Select(l => l.Name).ToList());
+            
+            if(newListId is null)
+            {
+                // TODO handle exception
+                return;
+            }
+            
+            await ReadingListService.CreateNewReadingsRequestAsync((Guid)newListId, response[0].PeriodName, response);
+            await LoggingService.AddLog(Enums.Action.CreateReadingList, (int)AppSettings.UserId!, $" Partner: {AppSettings.ActivePartner!.PartnerId} Building ids: {JsonSerializer.Serialize(_selectedBuildingIds)} Locations: {JsonSerializer.Serialize(_selectedLocations.Select(l => l.Name).ToList())}", null);
+            NavManager.NavigateTo("/reading-lists");
+        }
+        catch(Exception e)
+        {
+            await LoggingService.AddLog(Enums.Action.CreateReadingList, (int)AppSettings.UserId!, $" Partner: {AppSettings.ActivePartner?.PartnerId} Building ids: {JsonSerializer.Serialize(_selectedBuildingIds)} Locations: {JsonSerializer.Serialize(_selectedLocations?.Select(l => l.Name).ToList())}", null, e.Message);
+        }
+        finally
+        {
+            await _modal?.HideAsync();
+            PreloadService.Hide();
+        }
+    }
+
+    private void OnLocationCheckChange((string Name, int BuildingId) location)
+    {
+        if(_selectedLocations.Contains(location))
+        {
+            _selectedLocations.Remove(location);
+        }
+        else
+        {
+            _selectedLocations.Add(location);
+        }
+    }
+
+    private bool IsAllLocationsSelectedForBuilding(int buildingId)
+    {
+        return _locations.Where(l => l.BuildingId.Equals(buildingId)).Select(l => (l.Location, l.BuildingId)).All(l => _selectedLocations.Contains(l));
+    } 
+
+    private void HandleBuildingCheckboxChange(int id)
+    {
+
+        if (_selectedBuildingIds.Contains(id))
+        {
+            _selectedBuildingIds.Remove(id);
+            _selectedLocations.RemoveAll(l => l.BuildingId.Equals(id));
+        }
+        else
+        {
+            _selectedBuildingIds.Add(id);
+        }
+    }
+
+    private void HandleClientSelectChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value.ToString(), out int clientId))
+        {
+            // Reset selected client and buildings
+            _selectedClientId = clientId;
+            _selectedBuildingIds.Clear();
+        }
+    }
+}
